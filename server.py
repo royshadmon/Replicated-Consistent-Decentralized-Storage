@@ -5,14 +5,16 @@ import socket
 def server_program():
 	# get the hostname
 	host = socket.gethostname()
-	port = 5000  # initiate port no above 1024
+	dns_addr = socket.gethostbyname(host)
+	port = 12345  # initiate port no above 1024
 
 	server_socket = socket.socket()  # get instance
+	server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 	# look closely. The bind() function takes tuple as argument
-	server_socket.bind((host, port))  # bind host address and port together
+	server_socket.bind((dns_addr, port))  # bind host address and port together
 
     # configure how many client the server can listen simultaneously
-	server_socket.listen(2)
+	server_socket.listen(1)
 	conn, address = server_socket.accept()  # accept new connection
 	print("Connection from: " + str(address))
 	while True:
@@ -22,8 +24,8 @@ def server_program():
 			# if data is not received break
 			break
 		print("from connected user: " + str(data))
-		data = input(' -> ')
-		conn.send(data.encode())  # send data to the client
+		msg = input(" -> ")
+		conn.send(msg.encode())  # send data to the client
 
 	conn.close()  # close the connection
 
