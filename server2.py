@@ -6,7 +6,7 @@ def server_program():
 	# get the hostname
 	host = socket.gethostname()
 	dns_addr = socket.gethostbyname(host)
-	port = 12345  # initiate port no above 1024
+	port = 12346  # initiate port no above 1024
 
 	server_socket = socket.socket()  # get instance
 	server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
