@@ -1,5 +1,8 @@
 
 import socket
+import logging
+
+logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
 
 def server_program():
@@ -16,20 +19,23 @@ def server_program():
     # configure how many client the server can listen simultaneously
 	server_socket.listen(2)
 	conn, address = server_socket.accept()  # accept new connection
-	print("Connection from: " + str(address))
+	logging.info("Connection from: %s", address)
+	storage = []
 	while True:
 		# receive data stream. it won't accept data packet greater than 1024 bytes
 		data = conn.recv(1024).decode()
-		if data.lower().strip().endswith('bye'):
-			print('hi')
-			break
-		if not data:
-			# if data is not received break
-			break
-		print("from connected user: " + str(data))
-		# msg = input(" -> ")
-		msg = 'Received request: ' + data
-		conn.send(msg.encode())  # send data to the client
+		data = data.lower()
+		if data.endswith('bye') or not data:
+			break			
+		elif data.split()[0] == 'get':
+			msg = storage[int(data.split()[1])]
+			  # send data to the client
+		else:
+			# store the data
+			storage.append(data)
+			msg = ('added to index ' + str(len(storage)))
+		logging.info("from connected user: " + str(data))
+		conn.send(msg.encode())
 
 	conn.close()  # close the connection
 

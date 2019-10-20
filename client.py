@@ -4,12 +4,14 @@ import logging
 
 connected_servers = []
 
+logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
+
+
 def which_server(message):
 	server_num = message.split(' ')[0]
 	try:
 		server_num = int(server_num) - 1
 		if server_num in range(0, len(connected_servers)):
-			print('success')
 			return server_num
 		else:
 			logging.warning('Server at index %d in connected_servers list does not exist', server_num)
@@ -41,7 +43,7 @@ def client_program(num_servers):
 			connected_servers.append(client_socket)
 		except Exception as e:
 			logging.warning('No server running on port: %s', port)
-			logging.warning('Exception message: %s', e)
+			logging.exception('Exception message: %s', e)
 			# we start servers on +1 ports
 			break
 		port += 1
@@ -57,9 +59,10 @@ def client_program(num_servers):
 		message = prepare_message(message)
 		client_socket.send(message.encode())  # send message
 		
-		data = client_socket.recv(1024).decode()  # receive response
-
-		print('Received from server: ' + data)  # show in terminal
+		reply = client_socket.recv(1024).decode()  # receive response
+		if not reply:
+			continue
+		logging.info('Received from server %d: %s', server_num, reply)  # show in terminal
 
 
 	client_socket.close()  # close the connection
