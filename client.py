@@ -17,16 +17,17 @@ def which_server(message):
 	except:
 		logging.warning('Server at index %s in connected_servers list does not exist', server_num)
 		return False				
-	
 
-
-def prepare_server_message(server_num):
+def get_server(server_num):
 	client_socket = connected_servers[server_num]
 	return client_socket
 
 def clean_message(message):
 	message = message.lower().strip()
 	return message
+
+def prepare_message(message):
+	return ' '.join(message.split()[1:])
 
 def client_program(num_servers):
 	host = socket.gethostname()  # as both code is running on same pc
@@ -52,7 +53,8 @@ def client_program(num_servers):
 		server_num = which_server(message)
 		if server_num is False:
 			continue
-		client_socket = prepare_server_message(server_num)
+		client_socket = get_server(server_num)
+		message = prepare_message(message)
 		client_socket.send(message.encode())  # send message
 		
 		data = client_socket.recv(1024).decode()  # receive response
