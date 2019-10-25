@@ -11,6 +11,12 @@ def connect_db():
 	db_cursor = db_instance.cursor()
 	return db_instance, db_cursor
 
+def create_clean_table(db_instance, db_cursor):
+	db_cursor.execute('DROP TABLE IF EXISTS numbers;')
+	db_instance.commit()
+	db_cursor.execute('CREATE TABLE IF NOT EXISTS numbers (row serial NOT NULL, input VARCHAR NOT NULL);')
+	db_instance.commit()
+
 def server_program():
 	# get the hostname
 	host = socket.gethostname()
@@ -18,8 +24,8 @@ def server_program():
 	port = 12345  # initiate port no above 1024
 
 	db_instance, db_cursor = connect_db()
-	db_cursor.execute('CREATE TABLE IF NOT EXISTS numbers (row serial NOT NULL, input VARCHAR NOT NULL);')
-	db_instance.commit()
+
+	create_clean_table(db_instance, db_cursor)
 	
 	logging.info('Table created')
 	server_socket = socket.socket()  # get instance
@@ -60,7 +66,7 @@ def server_program():
 			query = db_cursor.mogrify(sql, (data,))
 			db_cursor.execute(query)
 			db_instance.commit()
-			msg = ('added to index ' + str(len(storage)))
+			msg = (data + ' added to index ')
 		logging.info("from connected user: " + str(data))
 		conn.send(msg.encode())
 
