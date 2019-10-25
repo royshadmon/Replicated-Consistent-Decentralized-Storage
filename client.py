@@ -62,7 +62,7 @@ def client_program(num_servers):
 		reply = client_socket.recv(1024).decode()  # receive response
 		if not reply:
 			continue
-		logging.info('Received from server %d: %s', server_num, reply)  # show in terminal
+		logging.info('Received from server %d: %s', server_num+1, reply)  # show in terminal
 
 
 	client_socket.close()  # close the connection

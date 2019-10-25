@@ -16,18 +16,12 @@ def create_clean_table(db_instance, db_cursor):
 	db_instance.commit()
 	db_cursor.execute('CREATE TABLE IF NOT EXISTS numbers (row serial NOT NULL, input VARCHAR NOT NULL);')
 	db_instance.commit()
+	logging.info('Table created')
 
-def server_program():
-	# get the hostname
+def socket_setup():
 	host = socket.gethostname()
 	dns_addr = socket.gethostbyname(host)
 	port = 12345  # initiate port no above 1024
-
-	db_instance, db_cursor = connect_db()
-
-	create_clean_table(db_instance, db_cursor)
-	
-	logging.info('Table created')
 	server_socket = socket.socket()  # get instance
 	server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 	# look closely. The bind() function takes tuple as argument
@@ -37,6 +31,29 @@ def server_program():
 	server_socket.listen(2)
 	conn, address = server_socket.accept()  # accept new connection
 	logging.info("Connection from: %s", address)
+	return conn	
+
+def server_program():
+	# get the hostname
+	# host = socket.gethostname()
+	# dns_addr = socket.gethostbyname(host)
+	# port = 12345  # initiate port no above 1024
+
+	conn = socket_setup()
+	db_instance, db_cursor = connect_db()
+
+	create_clean_table(db_instance, db_cursor)
+	
+	
+	# server_socket = socket.socket()  # get instance
+	# server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+	# # look closely. The bind() function takes tuple as argument
+	# server_socket.bind((dns_addr, port))  # bind host address and port together
+
+ #    # configure how many client the server can listen simultaneously
+	# server_socket.listen(2)
+	# conn, address = server_socket.accept()  # accept new connection
+	# logging.info("Connection from: %s", address)
 	while True:
 		# receive data stream. it won't accept data packet greater than 1024 bytes
 		data = conn.recv(1024).decode()
