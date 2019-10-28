@@ -22,6 +22,19 @@ def create_clean_table(db_instance, db_cursor):
 	logging.info('Table created')
 
 
+def get_row_from_db(row_number):
+	db_instance, db_cursor = connect_db()
+	try:
+		db_cursor.execute('SELECT input FROM numbers WHERE row = %d;' % (row_number))
+		rows = db_cursor.fetchall()
+		print("ROWS", rows)	
+		msg = ' '.join(rows[0])
+	except:
+		logging.warning('Row number %d for get request does not exist in table', row_number)	
+		msg = 'Row does not exist'
+	return msg	
+
+
 # Multithreaded Python server : TCP Server Socket Thread Pool
 class ClientThread(Thread): 
 	def __init__(self,ip,port): 
@@ -33,11 +46,27 @@ class ClientThread(Thread):
 	def run(self): 
 		while True : 
 			data = conn.recv(2048) 
+			data = data.decode()
 			print ("Server received data from client:", data)
-			MESSAGE = input("Multithreaded Python server : Enter Response from Server/Enter exit:")
-			if MESSAGE == 'exit':
-				break
-			conn.send(MESSAGE.encode())  # echo 
+
+			if data.split()[0] == 'get':
+				try:
+					row_number = int(data.split()[1])
+				except:
+					logging.warning('Get row_number %s does not exist', data.split()[1])
+					MESSAGE = 'Invalid get request'
+					conn.send(msg.encode())
+					continue		
+				MESSAGE = get_row_from_db(row_number)					
+				conn.send(MESSAGE.encode())
+			# if MESSAGE == 'exit':
+			# 	break				
+			# conn.send(MESSAGE.encode())  # echo 
+
+
+
+
+
 
 class DeviceThread(Thread):
 	def __init__(self,ip,port):
@@ -45,17 +74,30 @@ class DeviceThread(Thread):
 		self.ip = ip
 		self.port = port
 		print('New device thread started for ' + ip + ':' + str(port))
-		db_instance, db_cursor = connect_db()
-		create_clean_table(db_instance, db_cursor)
+		self.db_instance, self.db_cursor = connect_db()
+		create_clean_table(self.db_instance, self.db_cursor)
+
+	def insert_into_db(self, data):
+		self.data = data.decode()
+		sql = 'INSERT INTO numbers (input) VALUES(%s);'
+		print('data is' ,self.data)
+		query = self.db_cursor.mogrify(sql, (self.data,))
+		self.db_cursor.execute(query)
+		self.db_instance.commit()
+		msg = (self.data + ' added to index ')
+		print("MSG IS ", msg)
 
 	def run(self): 
 		while True : 
 			data = conn.recv(2048) 
 			print ("Server received data from device:", data)
+			self.insert_into_db(data)
 			# MESSAGE = input("Multithreaded Python server : Enter Response from Server/Enter exit:")
 			# if MESSAGE == 'exit':
 				# break
-			# conn.send(MESSAGE.encode())		
+			# conn.send(MESSAGE.encode())
+
+
 
 # Multithreaded Python server : TCP Server Socket Program Stub
 TCP_IP = '0.0.0.0' 
