@@ -44,16 +44,6 @@ def server_program():
 
 	create_clean_table(db_instance, db_cursor)
 	
-	
-	# server_socket = socket.socket()  # get instance
-	# server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-	# # look closely. The bind() function takes tuple as argument
-	# server_socket.bind((dns_addr, port))  # bind host address and port together
-
- #    # configure how many client the server can listen simultaneously
-	# server_socket.listen(2)
-	# conn, address = server_socket.accept()  # accept new connection
-	# logging.info("Connection from: %s", address)
 	while True:
 		# receive data stream. it won't accept data packet greater than 1024 bytes
 		data = conn.recv(1024).decode()
