@@ -25,12 +25,6 @@ db_cursor = None
 device_channel = 'device_channel'
 client_channel = 'client_channel'
 
-
-# class Msg:
-#     def __init__(self, msg):
-#         self.user_id = user_id
-#         self.msg = msg
-
 meta = {
     'uuid': pubnub.uuid,
     'type': my_type,

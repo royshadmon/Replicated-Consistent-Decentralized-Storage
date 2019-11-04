@@ -25,12 +25,6 @@ db_cursor = None
 device_channel = 'device_channel'
 client_channel = 'client_channel'
 
-
-# class Msg:
-#     def __init__(self, msg):
-#         self.user_id = user_id
-#         self.msg = msg
-
 meta = {
     'uuid': pubnub.uuid,
     'type': my_type,
@@ -38,7 +32,7 @@ meta = {
 
 def connect_db():
     db_instance = psycopg2.connect(database='postgres', user='postgres', password='password', host='127.0.0.1',
-                                   port='5433')
+                                   port='5432')
     print('opened database')
     db_cursor = db_instance.cursor()
     return db_instance, db_cursor
