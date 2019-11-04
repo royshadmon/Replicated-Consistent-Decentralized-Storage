@@ -6,6 +6,7 @@ import time
 import os
 import logging
 import psycopg2
+import json
 
 my_type = 'server'
 # logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
@@ -46,7 +47,7 @@ def connect_db():
 def create_clean_table(db_instance, db_cursor):
     db_cursor.execute('DROP TABLE IF EXISTS numbers;')
     db_instance.commit()
-    db_cursor.execute('CREATE TABLE IF NOT EXISTS numbers (row serial NOT NULL, input VARCHAR NOT NULL);')
+    db_cursor.execute('CREATE TABLE IF NOT EXISTS numbers (row serial NOT NULL, created_time timestamptz NOT NULL, input VARCHAR NOT NULL);')
     db_instance.commit()
     logging.info('Table created')
 
@@ -54,18 +55,15 @@ def create_clean_table(db_instance, db_cursor):
 def insert_into_db(data):
     global db_instance
     global db_cursor
-    # data = data.decode()
-    sql = 'INSERT INTO numbers (input) VALUES(%s);'
-    print('data is', data)
-    query = db_cursor.mogrify(sql, (data,))
+    sql = 'INSERT INTO numbers (created_time, input) VALUES(%s, %s);'
+    query = db_cursor.mogrify(sql, (data['datetime'], data['value']))
     db_cursor.execute(query)
     db_instance.commit()
-    msg = (data + ' added to index ')
-    print("MSG IS ", msg)
+    msg = (data['datetime'] + ' and ' + str(data['value']) + ' added to index ')
+    
 
 
 def get_row_from_db(row_number):
-    # db_instance, db_cursor = connect_db()
     global db_instance
     global db_cursor
     try:
@@ -95,30 +93,24 @@ class MySubscribeCallback(SubscribeCallback):
         pass
 
     def message(self, pubnub, message):
-        print("from device 2: " + message.message)
-        print(message.channel)
         if message.channel == device_channel:
-            insert_into_db(message.message)
-        else:
-            # msg = Msg(get_row_from_db(message.message))
+            msg = message.message.replace("\'", "\"")
+            res = json.loads(msg) 
+            insert_into_db(res)
+        else:            
             msg = get_row_from_db(message.message)
-            # print('send client msg %s %s\n' % (msg.msg, msg.user_id))
             send_message(msg)
 
 def send_message(msg):
     print('the message sent is %s' % msg)
-    # pubnub.publish().channel(client_channel).message(str(msg)).pn_async(my_publish_callback)                  
     pubnub.publish().channel(client_channel).meta(meta).message(msg).sync()
 
 
 
-## publish a message
+# Run server indefinitely 
 def main():
     while True:
         continue
-        # msg = input("Input a message to publish: ")
-        # if msg == 'exit': os._exit(1)
-        # pubnub.publish().channel(client_channel).message(str(msg)).pn_async(my_publish_callback)
 
 if __name__ == "__main__":    
     db_instance, db_cursor = connect_db()
