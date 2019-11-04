@@ -18,7 +18,10 @@ pubnub = PubNub(pnconfig)
 
 client_channel = 'client_channel'
 
-user_id = 2
+meta = {
+    'uuid': pubnub.uuid,
+    'type': 'client',
+}
 
 def my_publish_callback(envelope, status):
     # Check whether request successfully completed or not
@@ -45,7 +48,7 @@ def main():
     while True:
 	    msg = input("Input a message to publish: ")
 	    if msg == 'exit': os._exit(1)
-	    pubnub.publish().channel(client_channel).message(str(msg)).pn_async(my_publish_callback)
+	    pubnub.publish().channel(client_channel).meta(meta).message(str(msg)).pn_async(my_publish_callback)
 
 
 if __name__ == "__main__":    

@@ -18,6 +18,11 @@ pubnub = PubNub(pnconfig)
 
 device_channel = 'device_channel'
 
+meta = {
+    'uuid': pubnub.uuid,
+    'type': 'device',
+}
+
 def my_publish_callback(envelope, status):
 	# Check whether request successfully completed or not
 	if not status.is_error():

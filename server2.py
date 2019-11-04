@@ -37,7 +37,7 @@ meta = {
 
 def connect_db():
     db_instance = psycopg2.connect(database='postgres', user='postgres', password='password', host='127.0.0.1',
-                                   port='5432')
+                                   port='5433')
     print('opened database')
     db_cursor = db_instance.cursor()
     return db_instance, db_cursor
