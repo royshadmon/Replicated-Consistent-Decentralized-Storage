@@ -7,9 +7,12 @@ import os
 import logging
 import psycopg2
 import json
+import sys
 
 my_type = 'server'
 # logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
+
+server_name = 'server1.log'
 
 pnconfig = PNConfiguration()
 pnconfig.publish_key = 'pub-c-5f42fdef-c22f-4438-9650-27d1a37c22a7'
@@ -22,8 +25,11 @@ pnconfig.filter_expression = "type !='" + my_type +"'"
 db_instance = None
 db_cursor = None
 
+recovery_channel = 'recovery_channel'
 device_channel = 'device_channel'
 client_channel = 'client_channel'
+
+print('my UUID is', pubnub.uuid)
 
 meta = {
     'uuid': pubnub.uuid,
@@ -41,7 +47,7 @@ def connect_db():
 def create_clean_table(db_instance, db_cursor):
     db_cursor.execute('DROP TABLE IF EXISTS numbers;')
     db_instance.commit()
-    db_cursor.execute('CREATE TABLE IF NOT EXISTS numbers (row serial NOT NULL, created_time timestamptz NOT NULL, input VARCHAR NOT NULL);')
+    db_cursor.execute('CREATE TABLE IF NOT EXISTS numbers (created_time timestamptz NOT NULL, input VARCHAR NOT NULL, row serial NOT NULL);')
     db_instance.commit()
     logging.info('Table created')
 
@@ -54,8 +60,9 @@ def insert_into_db(data):
     db_cursor.execute(query)
     db_instance.commit()
     msg = (data['datetime'] + ' and ' + str(data['value']) + ' added to index ')
-    
-
+    with open(server_name, 'a') as f:
+        f.write(data['datetime'] + '\n')
+    print('success')
 
 def get_row_from_db(row_number):
     global db_instance
@@ -91,16 +98,24 @@ class MySubscribeCallback(SubscribeCallback):
             msg = message.message.replace("\'", "\"")
             res = json.loads(msg) 
             insert_into_db(res)
-        else:            
+        elif message.channel == client_channel:            
             msg = get_row_from_db(message.message)
             send_message(msg)
+        elif message.channel == recovery_channel:
+            print(message.channel)
+            recovery()            
 
 def send_message(msg):
     print('the message sent is %s' % msg)
     pubnub.publish().channel(client_channel).meta(meta).message(msg).sync()
 
 
-
+def recovery():
+    with open(server_name, 'r') as f:
+        data = []
+        data.append((list(f)[-1])) 
+        pubnub.publish().channel(recovery_channel).meta(meta).message(str(data)).sync()
+ 
 # Run server indefinitely 
 def main():
     while True:
@@ -109,7 +124,7 @@ def main():
 if __name__ == "__main__":    
     db_instance, db_cursor = connect_db()
     pubnub.add_listener(MySubscribeCallback())
-    pubnub.subscribe().channels([device_channel, client_channel]).execute()
+    pubnub.subscribe().channels([device_channel, client_channel, recovery_channel]).execute()
     create_clean_table(db_instance, db_cursor)
     # pubnub.subscribe().channels(client_channel).execute()
     main()

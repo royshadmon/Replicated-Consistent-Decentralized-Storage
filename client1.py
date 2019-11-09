@@ -38,8 +38,8 @@ class MySubscribeCallback(SubscribeCallback):
         pass
 
     def message(self, pubnub, message):
-        print("from server: " + message.message)
-
+        # print("from server: " + message.message)
+        print(message.message.replace("['", '').replace("']", '').strip())
 
 
 
@@ -48,10 +48,10 @@ def main():
     while True:
 	    msg = input("Input a message to publish: ")
 	    if msg == 'exit': os._exit(1)
-	    pubnub.publish().channel(client_channel).meta(meta).message(str(msg)).pn_async(my_publish_callback)
+	    pubnub.publish().channel(client_channel).meta(meta).message(msg).pn_async(my_publish_callback)
 
 
 if __name__ == "__main__":    
     pubnub.add_listener(MySubscribeCallback())
-    pubnub.subscribe().channels(client_channel).execute()
+    pubnub.subscribe().channels([client_channel]).execute()
     main()
