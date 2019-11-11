@@ -8,6 +8,8 @@ import logging
 import psycopg2
 import json
 import sys
+from datetime import datetime
+
 
 my_type = 'server'
 # logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
@@ -20,7 +22,7 @@ pnconfig.subscribe_key = 'sub-c-41b2ef2c-fc62-11e9-8f6e-d28065e14af1'
 pnconfig.ssl = False
 pubnub = PubNub(pnconfig)
 pnconfig.filter_expression = "uuid !='" + pubnub.uuid +"'"
-pnconfig.filter_expression = "type !='" + my_type +"'"
+# pnconfig.filter_expression = "type !='" + my_type +"'"
 
 db_instance = None
 db_cursor = None
@@ -103,18 +105,51 @@ class MySubscribeCallback(SubscribeCallback):
             send_message(msg)
         elif message.channel == recovery_channel:
             print(message.channel)
-            recovery()            
+            # recovery()  
+            # last_row = get_row_from_db()
+            rows = get_all_rows_since_timestamp(message.message)
+            data = []
+            for row in rows:
+                data.append((row[0].strftime("%Y-%m-%d %H:%M:%S"), row[1], row[2]))
+                # row[0] = row[0].strftime("%Y-%m-%d %H:%M:%S")
+            tuples = [{'date':i[0], 'input': i[1], 'row': i[2]}  for i in data]
+            print('sending data ', tuples)
+            # for row in tuples:
+            #     print(sys.getsizeof(row))
+            pubnub.publish().channel(recovery_channel).meta(meta).message(tuples).sync()
+
 
 def send_message(msg):
     print('the message sent is %s' % msg)
     pubnub.publish().channel(client_channel).meta(meta).message(msg).sync()
 
 
-def recovery():
-    with open(server_name, 'r') as f:
-        data = []
-        data.append((list(f)[-1])) 
-        pubnub.publish().channel(recovery_channel).meta(meta).message(str(data)).sync()
+def get_last_row_from_log():
+    try:
+        with open(server_name, 'r') as f:
+            data = []
+            data.append((list(f)[-1])) 
+            return data[0].replace('\n', '')
+        # pubnub.publish().channel(recovery_channel).meta(meta).message(str(data)).sync()
+    except Exception as e:
+        return None
+
+def get_all_rows_since_timestamp(timestamp):
+    global db_instance
+    global db_cursor
+    try:
+        query = 'SELECT * FROM numbers WHERE created_time > \'%s\';' % (timestamp)
+        print(query)
+        db_cursor.execute(query)
+        rows = db_cursor.fetchall()
+        if rows:
+            return rows
+         
+        return '%s Is the most up-to-date' % (timestamp)
+    except:
+        logging.warning('Timestamp %s is not valid' % (timestamp))
+        msg = 'Timestamp %s is not valid' % (timestamp)
+        return msg
  
 # Run server indefinitely 
 def main():
@@ -123,6 +158,11 @@ def main():
 
 if __name__ == "__main__":    
     db_instance, db_cursor = connect_db()
+    # timestamp = get_last_row_from_log()
+    # rows = get_all_rows_since_timestamp(timestamp)
+    # for row in rows:
+    #     print(row[0].strftime("%Y-%m-%d %H:%M:%S") + ' %s %d' % (row[1], row[2]))
+    # exit()
     pubnub.add_listener(MySubscribeCallback())
     pubnub.subscribe().channels([device_channel, client_channel, recovery_channel]).execute()
     create_clean_table(db_instance, db_cursor)

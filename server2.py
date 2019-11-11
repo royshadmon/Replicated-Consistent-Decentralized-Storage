@@ -7,6 +7,9 @@ import os
 import logging
 import psycopg2
 import json
+import sys
+from datetime import datetime
+
 
 my_type = 'server'
 # logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
@@ -19,7 +22,7 @@ pnconfig.subscribe_key = 'sub-c-41b2ef2c-fc62-11e9-8f6e-d28065e14af1'
 pnconfig.ssl = False
 pubnub = PubNub(pnconfig)
 pnconfig.filter_expression = "uuid !='" + pubnub.uuid +"'"
-pnconfig.filter_expression = "type !='" + my_type +"'"
+# pnconfig.filter_expression = "type !='" + my_type +"'"
 
 db_instance = None
 db_cursor = None
@@ -46,7 +49,7 @@ def connect_db():
 def create_clean_table(db_instance, db_cursor):
     db_cursor.execute('DROP TABLE IF EXISTS numbers;')
     db_instance.commit()
-    db_cursor.execute('CREATE TABLE IF NOT EXISTS numbers (created_time timestamptz NOT NULL, input VARCHAR NOT NULL);')
+    db_cursor.execute('CREATE TABLE IF NOT EXISTS numbers (created_time timestamptz NOT NULL, input VARCHAR NOT NULL, row serial NOT NULL);')
     db_instance.commit()
     logging.info('Table created')
 
@@ -61,7 +64,7 @@ def insert_into_db(data):
     msg = (data['datetime'] + ' and ' + str(data['value']) + ' added to index ')
     with open(server_name, 'a') as f:
         f.write(data['datetime'] + '\n')
-    
+    print('success')
 
 def get_row_from_db(row_number):
     global db_instance
@@ -94,25 +97,69 @@ class MySubscribeCallback(SubscribeCallback):
 
     def message(self, pubnub, message):
         if message.channel == device_channel:
-            msg = message.message.replace("\'", "\"")
-            res = json.loads(msg) 
-            insert_into_db(res)
+            pass
+            # msg = message.message.replace("\'", "\"")
+            # res = json.loads(msg) 
+            # insert_into_db(res)
         elif message.channel == client_channel:            
             msg = get_row_from_db(message.message)
             send_message(msg)
         elif message.channel == recovery_channel:
-            recovery()            
+            print(message.channel)
+            # print(message.message)
+            process_recovered_data(message.message)
+
+def recovery_insert_into_db(date, value, row_num):
+    global db_instance
+    global db_cursor
+    print(type(row_num))
+    sql = 'INSERT INTO numbers (created_time, input, row) VALUES(%s, %s, %s);'
+    query = db_cursor.mogrify(sql, (date, value, row_num))
+    print(query)
+    db_cursor.execute(query)
+    db_instance.commit()
+    # msg = (data['datetime'] + ' and ' + str(data['value']) + ' added to index ')
+    with open(server_name, 'a') as f:
+        f.write(date + '\n')
+    print('success')
+
+def process_recovered_data(data):
+    for row in data:
+        date = row['date']
+        value = row['input']
+        row_num = row['row']
+        recovery_insert_into_db(date, value, row_num)
+
 
 def send_message(msg):
     print('the message sent is %s' % msg)
     pubnub.publish().channel(client_channel).meta(meta).message(msg).sync()
 
 
-def recovery():
+def get_last_row_from_log():
     with open(server_name, 'r') as f:
-        last_commit = (list(f)[-1])
-        pubnub.publish().channel(recovery_channel).meta(meta).message(str(last_commit)).sync()
+        data = []
+        data.append((list(f)[-1])) 
+        return data[0].replace('\n', '')
+        # pubnub.publish().channel(recovery_channel).meta(meta).message(str(data)).sync()
 
+def get_all_rows_since_timestamp(timestamp):
+    global db_instance
+    global db_cursor
+    try:
+        query = 'SELECT * FROM numbers WHERE created_time > \'%s\';' % (timestamp)
+        print(query)
+        db_cursor.execute(query)
+        rows = db_cursor.fetchall()
+        if rows:
+            return rows
+         
+        return '%s Is the most up-to-date' % (timestamp)
+    except:
+        logging.warning('Timestamp %s is not valid' % (timestamp))
+        msg = 'Timestamp %s is not valid' % (timestamp)
+        return msg
+ 
 # Run server indefinitely 
 def main():
     while True:
@@ -120,11 +167,17 @@ def main():
 
 if __name__ == "__main__":    
     db_instance, db_cursor = connect_db()
+    # timestamp = get_last_row_from_log()
+    # rows = get_all_rows_since_timestamp(timestamp)
+    # for row in rows:
+    #     print(row[0].strftime("%Y-%m-%d %H:%M:%S") + ' %s %d' % (row[1], row[2]))
+    # exit()
     pubnub.add_listener(MySubscribeCallback())
     pubnub.subscribe().channels([device_channel, client_channel, recovery_channel]).execute()
-    recovery()
-    exit()
     create_clean_table(db_instance, db_cursor)
+    print('send message')
+    pubnub.publish().channel(recovery_channel).meta(meta).message('2019-11-09 12:54:55').sync()
+    print('sent message')
     # pubnub.subscribe().channels(client_channel).execute()
-    main()
+    # main()
 
