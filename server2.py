@@ -49,7 +49,7 @@ def connect_db():
 def create_clean_table(db_instance, db_cursor):
     db_cursor.execute('DROP TABLE IF EXISTS numbers;')
     db_instance.commit()
-    db_cursor.execute('CREATE TABLE IF NOT EXISTS numbers (created_time timestamptz NOT NULL, input VARCHAR NOT NULL, row serial NOT NULL);')
+    db_cursor.execute('CREATE TABLE IF NOT EXISTS numbers (created_time timestamptz NOT NULL, input VARCHAR NOT NULL);')
     db_instance.commit()
     logging.info('Table created')
 
@@ -66,19 +66,19 @@ def insert_into_db(data):
         f.write(data['datetime'] + '\n')
     print('success')
 
-def get_row_from_db(row_number):
+def get_row_from_db(date):
     global db_instance
     global db_cursor
     try:
-        db_cursor.execute('SELECT input FROM numbers WHERE row = %d;' % (int(row_number)))
+        db_cursor.execute('SELECT input FROM numbers WHERE created_time = %d;' % (date))
         rows = db_cursor.fetchall()
         if rows:
             return ' '.join(rows[0])
          
         return 'Row %s does not exist' % (row_number)
     except:
-        logging.warning('Row number %d for get request does not exist in table', row_number)
-        msg = 'Row %s is not valid' % (row_number)
+        logging.warning('Date %s for get request does not exist in table', date)
+        msg = 'Date %s is not valid' % (date)
         return msg
 
 
@@ -103,37 +103,35 @@ class MySubscribeCallback(SubscribeCallback):
             # insert_into_db(res)
         elif message.channel == client_channel:            
             msg = get_row_from_db(message.message)
-            send_message(msg)
+            send_message(msg, client_channel)
         elif message.channel == recovery_channel:
             print(message.channel)
             # print(message.message)
             process_recovered_data(message.message)
 
-def recovery_insert_into_db(date, value, row_num):
+def recovery_insert_into_db(date, value):
     global db_instance
     global db_cursor
     print(type(row_num))
-    sql = 'INSERT INTO numbers (created_time, input, row) VALUES(%s, %s, %s);'
-    query = db_cursor.mogrify(sql, (date, value, row_num))
+    sql = 'INSERT INTO numbers (created_time, input) VALUES(%s, %s);'
+    query = db_cursor.mogrify(sql, (date, value))
     print(query)
     db_cursor.execute(query)
     db_instance.commit()
     # msg = (data['datetime'] + ' and ' + str(data['value']) + ' added to index ')
     with open(server_name, 'a') as f:
         f.write(date + '\n')
-    print('success')
 
 def process_recovered_data(data):
     for row in data:
         date = row['date']
         value = row['input']
-        row_num = row['row']
-        recovery_insert_into_db(date, value, row_num)
+        recovery_insert_into_db(date, value)
 
 
-def send_message(msg):
+def send_message(msg, channel):
     print('the message sent is %s' % msg)
-    pubnub.publish().channel(client_channel).meta(meta).message(msg).sync()
+    pubnub.publish().channel(channel).meta(meta).message(msg).sync()
 
 
 def get_last_row_from_log():
