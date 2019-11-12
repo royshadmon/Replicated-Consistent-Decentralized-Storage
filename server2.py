@@ -49,7 +49,7 @@ def connect_db():
 def create_clean_table(db_instance, db_cursor):
     db_cursor.execute('DROP TABLE IF EXISTS numbers;')
     db_instance.commit()
-    db_cursor.execute('CREATE TABLE IF NOT EXISTS numbers (created_time timestamptz NOT NULL, input VARCHAR NOT NULL);')
+    db_cursor.execute('CREATE TABLE IF NOT EXISTS numbers (created_time timestamptz NOT NULL, input VARCHAR NOT NULL, PRIMARY KEY (created_time));')
     db_instance.commit()
     logging.info('Table created')
 
