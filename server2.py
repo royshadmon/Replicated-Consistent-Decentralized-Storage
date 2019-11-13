@@ -14,7 +14,7 @@ from datetime import datetime
 my_type = 'server'
 # logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
-log_file = 'server1.log'
+log_file = 'server2.log'
 
 pnconfig = PNConfiguration()
 pnconfig.publish_key = 'pub-c-5f42fdef-c22f-4438-9650-27d1a37c22a7'
@@ -40,7 +40,7 @@ meta = {
 
 def connect_db():
     db_instance = psycopg2.connect(database='postgres', user='postgres', password='password', host='127.0.0.1',
-                                   port='5432')
+                                   port='5433')
     print('opened database')
     db_cursor = db_instance.cursor()
     return db_instance, db_cursor

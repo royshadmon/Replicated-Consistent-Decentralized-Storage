@@ -58,17 +58,6 @@ def delete_log():
         with open(log_file, "w"):
             pass
 
-# def insert_into_db(data):
-#     global db_instance
-#     global db_cursor
-#     sql = 'INSERT INTO numbers (created_time, input) VALUES(%s, %s);'
-#     query = db_cursor.mogrify(sql, (data['datetime'], data['input']))
-#     db_cursor.execute(query)
-#     db_instance.commit()
-#     msg = (data['datetime'] + ' and ' + str(data['input']) + ' added to index ')
-#     with open(server_name, 'a') as f:
-#         f.write(data['datetime'] + '\n')
-#     print('success')
 
 def get_row_from_db(date):
     global db_instance
