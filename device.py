@@ -24,10 +24,14 @@ meta = {
 }
 
 def create_message(value):
-		data = {}
-		data['value'] = value
-		data['datetime'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-7]
-		return str(data)
+		data = []
+		date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+		data.append((date, value))
+		# data['input'] = value
+		# data['datetime'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+		tuples = [{'date':i[0], 'input': i[1]}  for i in data]
+		# return str(data)
+		return tuples
 
 
 def my_publish_callback(envelope, status):

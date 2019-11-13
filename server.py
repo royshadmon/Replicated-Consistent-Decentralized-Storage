@@ -14,7 +14,7 @@ from datetime import datetime
 my_type = 'server'
 # logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
-server_name = 'server1.log'
+log_file = 'server1.log'
 
 pnconfig = PNConfiguration()
 pnconfig.publish_key = 'pub-c-5f42fdef-c22f-4438-9650-27d1a37c22a7'
@@ -53,18 +53,22 @@ def create_clean_table(db_instance, db_cursor):
     db_instance.commit()
     logging.info('Table created')
 
+def delete_log():
+    if os.path.isfile(log_file):
+        with open(log_file, "w"):
+            pass
 
-def insert_into_db(data):
-    global db_instance
-    global db_cursor
-    sql = 'INSERT INTO numbers (created_time, input) VALUES(%s, %s);'
-    query = db_cursor.mogrify(sql, (data['datetime'], data['value']))
-    db_cursor.execute(query)
-    db_instance.commit()
-    msg = (data['datetime'] + ' and ' + str(data['value']) + ' added to index ')
-    with open(server_name, 'a') as f:
-        f.write(data['datetime'] + '\n')
-    print('success')
+# def insert_into_db(data):
+#     global db_instance
+#     global db_cursor
+#     sql = 'INSERT INTO numbers (created_time, input) VALUES(%s, %s);'
+#     query = db_cursor.mogrify(sql, (data['datetime'], data['input']))
+#     db_cursor.execute(query)
+#     db_instance.commit()
+#     msg = (data['datetime'] + ' and ' + str(data['input']) + ' added to index ')
+#     with open(server_name, 'a') as f:
+#         f.write(data['datetime'] + '\n')
+#     print('success')
 
 def get_row_from_db(date):
     global db_instance
@@ -97,9 +101,9 @@ class MySubscribeCallback(SubscribeCallback):
 
     def message(self, pubnub, message):
         if message.channel == device_channel:
-            msg = message.message.replace("\'", "\"")
-            res = json.loads(msg) 
-            insert_into_db(res)
+            # msg = message.message.replace("\'", "\"")
+            # res = json.loads(msg) 
+            process_recovered_data(message.message)
         elif message.channel == client_channel:            
             msg = get_row_from_db(message.message)
             send_message(msg, client_channel)
@@ -110,7 +114,7 @@ class MySubscribeCallback(SubscribeCallback):
             rows = get_all_rows_since_timestamp(message.message)
             data = []
             for row in rows:
-                data.append((row[0].strftime("%Y-%m-%d %H:%M:%S"), row[1], row[2]))
+                data.append((row[0].strftime("%Y-%m-%d %H:%M:%S"), row[1]))
                 # row[0] = row[0].strftime("%Y-%m-%d %H:%M:%S")
             tuples = [{'date':i[0], 'input': i[1]}  for i in data]
             print('sending data ', tuples)
@@ -118,24 +122,24 @@ class MySubscribeCallback(SubscribeCallback):
             send_message(tuples, recovery_channel)
 
 
-def recovery_insert_into_db(date, value):
+def insert_into_db(date, value):
     global db_instance
     global db_cursor
-    print(type(row_num))
+    # print(type(row_num))
     sql = 'INSERT INTO numbers (created_time, input) VALUES(%s, %s);'
     query = db_cursor.mogrify(sql, (date, value))
     print(query)
     db_cursor.execute(query)
     db_instance.commit()
     # msg = (data['datetime'] + ' and ' + str(data['value']) + ' added to index ')
-    with open(server_name, 'a') as f:
+    with open(log_file, 'a') as f:
         f.write(date + '\n')
 
 def process_recovered_data(data):
     for row in data:
         date = row['date']
         value = row['input']
-        recovery_insert_into_db(date, value)
+        insert_into_db(date, value)
 
 def send_message(msg, channel):
     print('the message sent is %s' % msg)
@@ -176,11 +180,7 @@ def main():
 
 if __name__ == "__main__":    
     db_instance, db_cursor = connect_db()
-    # timestamp = get_last_row_from_log()
-    # rows = get_all_rows_since_timestamp(timestamp)
-    # for row in rows:
-    #     print(row[0].strftime("%Y-%m-%d %H:%M:%S") + ' %s %d' % (row[1], row[2]))
-    # exit()
+    delete_log()
     pubnub.add_listener(MySubscribeCallback())
     pubnub.subscribe().channels([device_channel, client_channel, recovery_channel]).execute()
     create_clean_table(db_instance, db_cursor)
