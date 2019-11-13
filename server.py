@@ -115,12 +115,11 @@ def insert_into_db(date, value):
     global db_instance
     global db_cursor
     # print(type(row_num))
-    sql = 'INSERT INTO numbers (created_time, input) VALUES(%s, %s);'
+    sql = 'INSERT INTO numbers (created_time, input) VALUES(%s, %s) ON CONFLICT(created_time) DO NOTHING;'
     query = db_cursor.mogrify(sql, (date, value))
     print(query)
     db_cursor.execute(query)
     db_instance.commit()
-    # msg = (data['datetime'] + ' and ' + str(data['value']) + ' added to index ')
     with open(log_file, 'a') as f:
         f.write(date + '\n')
 
@@ -137,7 +136,7 @@ def send_message(msg, channel):
 
 def get_last_row_from_log():
     try:
-        with open(server_name, 'r') as f:
+        with open(log_file, 'r') as f:
             data = []
             data.append((list(f)[-1])) 
             return data[0].replace('\n', '')
@@ -148,15 +147,19 @@ def get_last_row_from_log():
 def get_all_rows_since_timestamp(timestamp):
     global db_instance
     global db_cursor
-    try:
+    if timestamp == 'None':
+        query = 'SELECT * FROM numbers;'
+    else:
         query = 'SELECT * FROM numbers WHERE created_time > \'%s\';' % (timestamp)
+
+    try:
         print(query)
         db_cursor.execute(query)
         rows = db_cursor.fetchall()
         if rows:
             return rows
          
-        return '%s Is the most up-to-date' % (timestamp)
+        return 'None'
     except:
         logging.warning('Timestamp %s is not valid' % (timestamp))
         msg = 'Timestamp %s is not valid' % (timestamp)
@@ -169,10 +172,9 @@ def main():
 
 if __name__ == "__main__":    
     db_instance, db_cursor = connect_db()
-    delete_log()
+    # delete_log()
     pubnub.add_listener(MySubscribeCallback())
     pubnub.subscribe().channels([device_channel, client_channel, recovery_channel]).execute()
-    create_clean_table(db_instance, db_cursor)
-    # pubnub.subscribe().channels(client_channel).execute()
+    # create_clean_table(db_instance, db_cursor)
     main()
 
