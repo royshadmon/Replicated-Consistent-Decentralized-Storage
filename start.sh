@@ -5,21 +5,27 @@ read noofservers
 echo Creating $noofservers servers
 # create/start 3 postgres instances
 START=1
-DBLOCATION= "/Users/niharika/Library/Application\Support/Postgres"
-DBLOGLOCATION= "/Users/niharika/Library/ApplicationSupport/Postgres/postgresql.log"
-PORT=5435
+
+DBLOCATION=/Users/niharika/Desktop/Replicated-Consistent-Storage/server1
+#DBLOGLOCATION=/Users/niharika/Desktop/Replicated-Consistent-Storage/servers/server1.log
+declare -i PORT=5440
 for (( c=$START; c<=$noofservers; c++ ))
 do
 	echo -n "$c "
-
-	initdb -D /Users/niharika/Library/Application\Support/Postgres
-	echo "here"
-	echo "pg_ctl -D $DBLOCATION -o $PORT -l $DBLOGLOCATION start"
-	pg_ctl -D $DBLOCATION -o "$((PORT + 1))" -l $DBLOGLOCATION start
-	#pg_ctl -D /Users/niharika/Library/ApplicationSupport/Postgres -o "-p 5435" -l /Users/niharika/Library/ApplicationSupport/Postgres/postgresql.log stop
+	CURRENT="${DBLOCATION/1/$c}"
+	echo "${CURRENT:0}"
+	mkdir "${CURRENT:0}"
+  initdb -D "${CURRENT:0}"
+	LOGEXT=/server.log
+	DBLOGLOCATION=$CURRENT$LOGEXT
+	echo "${DBLOGLOCATION:0}"
+	PORT+=1
+	echo $PORT
+	pg_ctl -D "${CURRENT:0}" -o "-p $((PORT))" -l "${DBLOGLOCATION:0}" start
+	#dropdb "${CURRENT:0}"
 done
-echo
-# start 3 python3 servers each connecting to its own db instnace
+
+# start 3 python3 servers each connecting to its own db instnace -p "$((PORT + 1))"
 
 # script should run python3 device.py
 
