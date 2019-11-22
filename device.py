@@ -56,6 +56,7 @@ class MySubscribeCallback(SubscribeCallback):
 
 def main():
 	i = 0
+
 	while True:
 		msg = create_message(i)
 		print(str(msg))

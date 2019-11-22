@@ -30,6 +30,7 @@ db_cursor = None
 recovery_channel = 'recovery_channel'
 device_channel = 'device_channel'
 client_channel = 'client_channel'
+meta_channel = 'meta_channel'
 
 print('my UUID is', pubnub.uuid)
 
@@ -38,12 +39,27 @@ meta = {
     'type': my_type,
 }
 
+
 def connect_db():
     db_instance = psycopg2.connect(database='postgres', user='postgres', password='password', host='127.0.0.1',
                                    port='5433')
     print('opened database')
     db_cursor = db_instance.cursor()
     return db_instance, db_cursor
+
+
+def setup(total_servers, server_num):
+    global log_file
+    global db_instance
+    global db_cursor
+    log_file = ('server%s.log' % (server_num))
+    print('logfile ', log_file)
+    db_instance, db_cursor = connect_db()
+    # delete_log()
+    
+    pubnub.add_listener(MySubscribeCallback())
+    pubnub.subscribe().channels([device_channel, client_channel, recovery_channel, meta_channel]).with_presence().execute()
+    # create_clean_table(db_instance, db_cursor)
 
 
 def create_clean_table(db_instance, db_cursor):
@@ -83,6 +99,7 @@ def my_publish_callback(envelope, status):
 
 class MySubscribeCallback(SubscribeCallback):
     def presence(self, pubnub, presence):
+        # print('pres %s' % presence.user_metadata)
         pass
 
     def status(self, pubnub, status):
@@ -92,6 +109,7 @@ class MySubscribeCallback(SubscribeCallback):
         if message.channel == device_channel:
             # msg = message.message.replace("\'", "\"")
             # res = json.loads(msg) 
+            # print(message.user_metadata)
             process_recovered_data(message.message)
         elif message.channel == client_channel:            
             msg = get_row_from_db(message.message)
@@ -104,19 +122,22 @@ class MySubscribeCallback(SubscribeCallback):
             #     data.append((row[0].strftime("%Y-%m-%d %H:%M:%S"), row[1]))
             # tuples = [{'date':i[0], 'input': i[1]}  for i in data]
             # print('sending data ', tuples)
-            # send_message(tuples, recovery_channel)
-            process_recovered_data(message.message)
+            # send_message(tuples, recovery_channel)    
+            process_recovered_data(message.message)        
+
+        elif message.channel == meta_channel:
+            print(message.user_metadata)
+ 
+
 
 def insert_into_db(date, value):
     global db_instance
     global db_cursor
-    # print(type(row_num))
     sql = 'INSERT INTO numbers (created_time, input) VALUES(%s, %s) ON CONFLICT(created_time) DO NOTHING;'
     query = db_cursor.mogrify(sql, (date, value))
-    print(query)
+    print('query is %s' % query)
     db_cursor.execute(query)
     db_instance.commit()
-    # msg = (data['datetime'] + ' and ' + str(data['value']) + ' added to index ')
     with open(log_file, 'a') as f:
         f.write(date + '\n')
 
@@ -131,22 +152,40 @@ def send_message(msg, channel):
     pubnub.publish().channel(channel).meta(meta).message(msg).sync()
 
 
+def recover_at_startup():
+    first_row = get_first_row_from_log()
+    last_row = get_last_row_from_log()
+    print(first_row)
+    print(last_row)
+    send_message([first_row, last_row], recovery_channel)
+
+
+def get_first_row_from_log():
+    print('log file is %s' % log_file)
+    try:
+        with open(log_file, 'r') as f:
+            row = f.readline().rstrip()
+            return row
+    except Exception as e:
+        return None
+
 def get_last_row_from_log():
     try:
         with open(log_file, 'r') as f:
             data = []
             data.append((list(f)[-1])) 
-            return data[0].replace('\n', '')
+            return data[0].rstrip()
+        # pubnub.publish().channel(recovery_channel).meta(meta).message(str(data)).sync()
     except Exception as e:
-        return 'None'
+        return None
 
 def get_all_rows_since_timestamp(timestamp):
     global db_instance
     global db_cursor
-    if timestamp == 'None':
+    if timestamp[0] is None and timestamp[1] is None:
         query = 'SELECT * FROM numbers;'
     else:
-        query = 'SELECT * FROM numbers WHERE created_time > \'%s\';' % (timestamp)
+        query = 'SELECT * FROM numbers WHERE created_time < \'%s\' and created_time > \'%s\';' % (timestamp[0], timestamp[1])
 
     try:
         print(query)
@@ -166,13 +205,11 @@ def main():
     while True:
         continue
 
-if __name__ == "__main__":    
-    db_instance, db_cursor = connect_db()
-    # delete_log()
-    pubnub.add_listener(MySubscribeCallback())
-    pubnub.subscribe().channels([device_channel, client_channel, recovery_channel]).execute()
-    # create_clean_table(db_instance, db_cursor)
-    date = get_last_row_from_log()
-    send_message(date, recovery_channel)
-    main()
-
+if __name__ == "__main__": 
+    total_servers = sys.argv[1]
+    server_num = sys.argv[2] 
+    
+    setup(total_servers, server_num)
+    
+    # recover_at_startup()
+    # main()
