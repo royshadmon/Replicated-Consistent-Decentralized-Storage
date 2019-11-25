@@ -33,6 +33,8 @@ log_file = None
 
 print('my UUID is', pubnub.uuid)
 
+in_recovery = True
+
 meta = {
     'uuid': pubnub.uuid,
     'type': my_type,
@@ -56,11 +58,13 @@ def setup(total_servers, server_num):
     log_file = ('server%s.log' % (server_num))
     print('logfile ', log_file)
     db_instance, db_cursor = connect_db()
-    # delete_log()
+    
+    create_new_log_file()
+    create_clean_table(db_instance, db_cursor)
     
     pubnub.add_listener(MySubscribeCallback())
-    pubnub.subscribe().channels([device_channel, client_channel, recovery_channel, meta_channel]).with_presence().execute()
-    # create_clean_table(db_instance, db_cursor)
+    pubnub.subscribe().channels([device_channel, client_channel, recovery_channel, meta_channel]).execute()
+    
 
 
 def create_clean_table(db_instance, db_cursor):
@@ -70,10 +74,11 @@ def create_clean_table(db_instance, db_cursor):
     db_instance.commit()
     logging.info('Table created')
 
-def delete_log():
+def create_new_log_file():
     if os.path.isfile(log_file):
-        with open(log_file, "w"):
-            pass
+        os.remove(log_file)
+    myFile = open(log_file, 'w+')
+    myFile.close()
 
 
 def get_row_from_db(date):
@@ -115,7 +120,12 @@ class MySubscribeCallback(SubscribeCallback):
             msg = get_row_from_db(message.message)
             send_message(msg, client_channel)
         elif message.channel == recovery_channel:
-            print(message.message)
+            # print(message.message)
+            global in_recovery
+            if in_recovery: 
+                process_recovered_data(message.message) 
+                in_recovery = False
+                return
             rows = get_all_rows_since_timestamp(message.message)
             print(rows)
             data = []
@@ -139,10 +149,13 @@ def insert_into_db(date, value):
         f.write(date + '\n')
 
 def process_recovered_data(data):
-    for row in data:
-        date = row['date']
-        value = row['input']
-        insert_into_db(date, value)
+    print('server 1 here ', data)
+    
+    if not all(v is None for v in data):
+        for row in data:
+            date = row['date']
+            value = row['input']
+            insert_into_db(date, value)
 
 def send_message(msg, channel):
     global meta
@@ -165,6 +178,8 @@ def get_first_row_from_log():
     try:
         with open(log_file, 'r') as f:
             row = f.readline().rstrip()
+            if not row:
+                return None
             return row
     except Exception as e:
         return None
@@ -214,6 +229,6 @@ if __name__ == "__main__":
     
     setup(total_servers, server_num)
     # send_message('hi', meta_channel)
-    # recover_at_startup()
-    # main()
+    recover_at_startup()
+    main()
 

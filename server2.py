@@ -34,6 +34,8 @@ meta_channel = 'meta_channel'
 
 print('my UUID is', pubnub.uuid)
 
+in_recovery = True
+
 meta = {
     'uuid': pubnub.uuid,
     'type': my_type,
@@ -55,11 +57,12 @@ def setup(total_servers, server_num):
     log_file = ('server%s.log' % (server_num))
     print('logfile ', log_file)
     db_instance, db_cursor = connect_db()
-    # delete_log()
+    
+    create_new_log_file()
+    create_clean_table(db_instance, db_cursor)
     
     pubnub.add_listener(MySubscribeCallback())
-    pubnub.subscribe().channels([device_channel, client_channel, recovery_channel, meta_channel]).with_presence().execute()
-    # create_clean_table(db_instance, db_cursor)
+    pubnub.subscribe().channels([device_channel, client_channel, recovery_channel, meta_channel]).execute()
 
 
 def create_clean_table(db_instance, db_cursor):
@@ -69,10 +72,11 @@ def create_clean_table(db_instance, db_cursor):
     db_instance.commit()
     logging.info('Table created')
 
-def delete_log():
+def create_new_log_file():
     if os.path.isfile(log_file):
-        with open(log_file, "w"):
-            pass
+        os.remove(log_file)
+    myFile = open(log_file, 'w+')
+    myFile.close()
 
 
 def get_row_from_db(date):
@@ -115,15 +119,20 @@ class MySubscribeCallback(SubscribeCallback):
             msg = get_row_from_db(message.message)
             send_message(msg, client_channel)
         elif message.channel == recovery_channel:
+            global in_recovery
+            if in_recovery: 
+                process_recovered_data(message.message) 
+                in_recovery = False
+                return
             # print(message.channel)
-            # rows = get_all_rows_since_timestamp(message.message)
-            # data = []
-            # for row in rows:
-            #     data.append((row[0].strftime("%Y-%m-%d %H:%M:%S"), row[1]))
-            # tuples = [{'date':i[0], 'input': i[1]}  for i in data]
+            rows = get_all_rows_since_timestamp(message.message)
+            data = []
+            for row in rows:
+                data.append((row[0].strftime("%Y-%m-%d %H:%M:%S"), row[1]))
+            tuples = [{'date':i[0], 'input': i[1]}  for i in data]
             # print('sending data ', tuples)
-            # send_message(tuples, recovery_channel)    
-            process_recovered_data(message.message)        
+            send_message(tuples, recovery_channel)    
+            
 
         elif message.channel == meta_channel:
             print(message.user_metadata)
@@ -142,10 +151,12 @@ def insert_into_db(date, value):
         f.write(date + '\n')
 
 def process_recovered_data(data):
-    for row in data:
-        date = row['date']
-        value = row['input']
-        insert_into_db(date, value)
+    print('server 2 here')
+    if not all(v is None for v in data):
+        for row in data:
+            date = row['date']
+            value = row['input']
+            insert_into_db(date, value)
 
 def send_message(msg, channel):
     print('the message sent is %s' % msg)
@@ -155,9 +166,10 @@ def send_message(msg, channel):
 def recover_at_startup():
     first_row = get_first_row_from_log()
     last_row = get_last_row_from_log()
-    print(first_row)
-    print(last_row)
+    print('first ', first_row)
+    print('last ', last_row)
     send_message([first_row, last_row], recovery_channel)
+
 
 
 def get_first_row_from_log():
@@ -165,6 +177,8 @@ def get_first_row_from_log():
     try:
         with open(log_file, 'r') as f:
             row = f.readline().rstrip()
+            if not row:
+                return None
             return row
     except Exception as e:
         return None
@@ -210,6 +224,7 @@ if __name__ == "__main__":
     server_num = sys.argv[2] 
     
     setup(total_servers, server_num)
-    
-    # recover_at_startup()
+    recover_at_startup()
+    main()
+
     # main()
