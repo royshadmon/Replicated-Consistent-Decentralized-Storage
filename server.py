@@ -24,16 +24,19 @@ db_cursor = None
 
 my_type = 'server'
 
-recovery_channel = 'recovery_channel'
+
 device_channel = 'device_channel'
 client_channel = 'client_channel'
 meta_channel = 'meta_channel'
+request_channel = 'request_channel'
+recovery_channel = 'recovery_channel'
+
+messages_received = 0
 
 log_file = None
 
 print('my UUID is', pubnub.uuid)
 
-in_recovery = True
 
 meta = {
     'uuid': pubnub.uuid,
@@ -59,11 +62,11 @@ def setup(total_servers, server_num):
     print('logfile ', log_file)
     db_instance, db_cursor = connect_db()
     
-    create_new_log_file()
-    create_clean_table(db_instance, db_cursor)
+    # create_new_log_file()
+    # create_clean_table(db_instance, db_cursor)
     
     pubnub.add_listener(MySubscribeCallback())
-    pubnub.subscribe().channels([device_channel, client_channel, recovery_channel, meta_channel]).execute()
+    pubnub.subscribe().channels([device_channel, client_channel, request_channel, meta_channel]).execute()
     
 
 
@@ -120,20 +123,27 @@ class MySubscribeCallback(SubscribeCallback):
             msg = get_row_from_db(message.message)
             send_message(msg, client_channel)
         elif message.channel == recovery_channel:
-            # print(message.message)
-            global in_recovery
-            if in_recovery: 
-                process_recovered_data(message.message) 
-                in_recovery = False
-                return
+
+            # print(message.message)   
+            print("IN HERE2")
+            if not all(v is None for v in message.message):
+                    process_recovered_data(message.message) 
+                    
+            pubnub.unsubscribe().channels(recovery_channel).execute()                     
+            messages_received = 0
+        elif message.channel == request_channel:
+            print("IN HERE")
             rows = get_all_rows_since_timestamp(message.message)
-            print(rows)
-            data = []
-            for row in rows:
-                data.append((row[0].strftime("%Y-%m-%d %H:%M:%S"), row[1]))
-            tuples = [{'date':i[0], 'input': i[1]}  for i in data]
-            print('sending data ', tuples)
-            send_message(tuples, recovery_channel)            
+            print("ROWS ARE ", rows)
+            if not rows is None:
+                data = []
+                for row in rows:
+                    data.append((row[0].strftime("%Y-%m-%d %H:%M:%S"), row[1]))
+                tuples = [{'date':i[0], 'input': i[1]}  for i in data]
+                print('sending data ', tuples)
+                send_message(tuples, recovery_channel)
+            else:
+                send_message(None, recovery_channel)                
 
 
 
@@ -155,6 +165,7 @@ def process_recovered_data(data):
         for row in data:
             date = row['date']
             value = row['input']
+            print('date %s value %s' % (date, value))
             insert_into_db(date, value)
 
 def send_message(msg, channel):
@@ -170,7 +181,8 @@ def recover_at_startup():
     last_row = get_last_row_from_log()
     print(first_row)
     print(last_row)
-    send_message([first_row, last_row], recovery_channel)
+    pubnub.subscribe().channels([recovery_channel]).execute()
+    send_message([first_row, last_row], request_channel)
 
 
 def get_first_row_from_log():
@@ -199,10 +211,8 @@ def get_all_rows_since_timestamp(timestamp):
     global db_cursor
     if timestamp[0] is None and timestamp[1] is None:
         sql = 'SELECT * FROM numbers;'
-        print('hihi 1')
     else:
         sql = 'SELECT * FROM numbers WHERE created_time < %s OR created_time > %s;'
-        print('hihi 2')
     try:
         query = db_cursor.mogrify(sql, (timestamp[0], timestamp[1]))
         print('query is %s' % query)
@@ -212,7 +222,7 @@ def get_all_rows_since_timestamp(timestamp):
         if rows:
             return rows
          
-        return 'None'
+        return None
     except:
         logging.warning('Timestamp %s is not valid' % (timestamp))
         msg = 'Timestamp %s is not valid' % (timestamp)
@@ -224,11 +234,15 @@ def main():
         continue
 
 if __name__ == "__main__": 
-    total_servers = sys.argv[1]
+    global total_servers
+    total_servers = int(sys.argv[1])
     server_num = sys.argv[2] 
     
     setup(total_servers, server_num)
     # send_message('hi', meta_channel)
     recover_at_startup()
-    main()
+    time.sleep(3)
+    print('heeere')
+    pubnub.unsubscribe().channels(recovery_channel).execute()                     
+
 

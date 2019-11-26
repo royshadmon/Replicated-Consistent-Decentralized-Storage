@@ -27,14 +27,16 @@ pnconfig.filter_expression = "uuid !='" + pubnub.uuid +"'"
 db_instance = None
 db_cursor = None
 
-recovery_channel = 'recovery_channel'
 device_channel = 'device_channel'
 client_channel = 'client_channel'
 meta_channel = 'meta_channel'
+request_channel = 'request_channel'
+recovery_channel = 'recovery_channel'
+
+messages_received = 0
 
 print('my UUID is', pubnub.uuid)
 
-in_recovery = True
 
 meta = {
     'uuid': pubnub.uuid,
@@ -62,7 +64,8 @@ def setup(total_servers, server_num):
     create_clean_table(db_instance, db_cursor)
     
     pubnub.add_listener(MySubscribeCallback())
-    pubnub.subscribe().channels([device_channel, client_channel, recovery_channel, meta_channel]).execute()
+    pubnub.subscribe().channels([device_channel, client_channel, request_channel, meta_channel]).execute()
+    
 
 
 def create_clean_table(db_instance, db_cursor):
@@ -103,7 +106,6 @@ def my_publish_callback(envelope, status):
 
 class MySubscribeCallback(SubscribeCallback):
     def presence(self, pubnub, presence):
-        # print('pres %s' % presence.user_metadata)
         pass
 
     def status(self, pubnub, status):
@@ -119,24 +121,33 @@ class MySubscribeCallback(SubscribeCallback):
             msg = get_row_from_db(message.message)
             send_message(msg, client_channel)
         elif message.channel == recovery_channel:
-            global in_recovery
-            if in_recovery: 
+            global messages_received
+            global total_servers
+            # print(message.message)   
+            print("IN HERE2")
+            if not all(v is None for v in message.message):
+                
                 process_recovered_data(message.message) 
-                in_recovery = False
-                return
-            # print(message.channel)
-            rows = get_all_rows_since_timestamp(message.message)
-            data = []
-            for row in rows:
-                data.append((row[0].strftime("%Y-%m-%d %H:%M:%S"), row[1]))
-            tuples = [{'date':i[0], 'input': i[1]}  for i in data]
-            # print('sending data ', tuples)
-            send_message(tuples, recovery_channel)    
+                
+            pubnub.unsubscribe().channels(recovery_channel).execute()                     
             
+        elif message.channel == request_channel:
+            print("IN HERE")
+            rows = get_all_rows_since_timestamp(message.message)
+            print("ROWS ARE ", rows)
+            print(type(rows))
+            if not rows is None:
+                print("SENDING SOMETHING", not rows is None)
+                data = []
+                for row in rows:
+                    data.append((row[0].strftime("%Y-%m-%d %H:%M:%S"), row[1]))
+                tuples = [{'date':i[0], 'input': i[1]}  for i in data]
+                print('sending data ', tuples)
+                send_message(tuples, recovery_channel)
+            else:
+                print('sending None')
+                send_message(None, recovery_channel)                
 
-        elif message.channel == meta_channel:
-            print(message.user_metadata)
- 
 
 
 def insert_into_db(date, value):
@@ -151,24 +162,30 @@ def insert_into_db(date, value):
         f.write(date + '\n')
 
 def process_recovered_data(data):
-    print('server 2 here')
+    print('server 1 here ', data)
+    
     if not all(v is None for v in data):
         for row in data:
             date = row['date']
             value = row['input']
+            print('date %s value %s' % (date, value))
             insert_into_db(date, value)
 
 def send_message(msg, channel):
+    global meta
     print('the message sent is %s' % msg)
-    pubnub.publish().channel(channel).meta(meta).message(msg).sync()
+    # print('meta is %s' % meta)
+    # pubnub.publish().channel(channel).meta(meta).message(msg).sync()
+    pubnub.publish().channel(channel).meta(meta).message(msg).pn_async(my_publish_callback)
 
 
 def recover_at_startup():
     first_row = get_first_row_from_log()
     last_row = get_last_row_from_log()
-    print('first ', first_row)
-    print('last ', last_row)
-    send_message([first_row, last_row], recovery_channel)
+    print(first_row)
+    print(last_row)
+    pubnub.subscribe().channels([recovery_channel]).execute()
+    send_message([first_row, last_row], request_channel)
 
 
 
@@ -194,21 +211,21 @@ def get_last_row_from_log():
         return None
 
 def get_all_rows_since_timestamp(timestamp):
-    global db_instance
-    global db_cursor
-    if timestamp[0] is None and timestamp[1] is None:
-        query = 'SELECT * FROM numbers;'
-    else:
-        query = 'SELECT * FROM numbers WHERE created_time < \'%s\' and created_time > \'%s\';' % (timestamp[0], timestamp[1])
 
+    if timestamp[0] is None and timestamp[1] is None:
+        sql = 'SELECT * FROM numbers;'
+    else:
+        sql = 'SELECT * FROM numbers WHERE created_time < %s OR created_time > %s;'
     try:
-        print(query)
+        query = db_cursor.mogrify(sql, (timestamp[0], timestamp[1]))
+        print('query is %s' % query)
+
         db_cursor.execute(query)
         rows = db_cursor.fetchall()
         if rows:
             return rows
          
-        return 'None'
+        return None
     except:
         logging.warning('Timestamp %s is not valid' % (timestamp))
         msg = 'Timestamp %s is not valid' % (timestamp)
@@ -220,11 +237,15 @@ def main():
         continue
 
 if __name__ == "__main__": 
-    total_servers = sys.argv[1]
+    global total_servers
+    total_servers = int(sys.argv[1])
     server_num = sys.argv[2] 
     
     setup(total_servers, server_num)
+    # send_message('hi', meta_channel)
     recover_at_startup()
-    main()
+    time.sleep(3)
+    print('heeere')
+    pubnub.unsubscribe().channels(recovery_channel).execute()                     
+    
 
-    # main()
