@@ -4,6 +4,7 @@ from pubnub.pnconfiguration import PNConfiguration
 from pubnub.pubnub import PubNub
 import time
 import os
+import sys
 
 pnconfig = PNConfiguration()
 
@@ -16,8 +17,7 @@ pubnub = PubNub(pnconfig)
 # pubnub.add_listener(MySubscribeCallback())
 # pubnub.subscribe().channels(client_channel).execute()
 
-client_channel = 'client_channel'
-
+channels = []
 meta = {
     'uuid': pubnub.uuid,
     'type': 'client',
@@ -39,19 +39,33 @@ class MySubscribeCallback(SubscribeCallback):
 
     def message(self, pubnub, message):
         # print("from server: " + message.message)
-        print(message.message.replace("['", '').replace("']", '').strip())
+        print(message.message)
 
 
 
 ## publish a message
 def main():
+    global channels
     while True:
-	    msg = input("Input a message to publish: ")
-	    if msg == 'exit': os._exit(1)
-	    pubnub.publish().channel(client_channel).meta(meta).message(msg).pn_async(my_publish_callback)
-
+        msg = input("Input a message to publish: ")
+        if msg == 'exit': os._exit(1)
+        msg = msg.split(' ', 1)
+        try:
+            channel = 'server_client_%s_channel' % msg[0]
+        except Exception as e:
+            print('Please direct a request to one of the following channels by listing just the number associated to that channel %s' % channels)
+            continue
+        if channel in channels:
+            pubnub.publish().channel(channel).meta(meta).message(msg[1]).pn_async(my_publish_callback)
+        else:
+            print('Channel does not exist. Please try again')
 
 if __name__ == "__main__":    
+    total_servers = int(sys.argv[1])
+    channels = []
+    for i in range(1, total_servers + 1):
+        server_client_channel = 'server_client_%d_channel' % i
+        channels.append(server_client_channel)
     pubnub.add_listener(MySubscribeCallback())
-    pubnub.subscribe().channels([client_channel]).execute()
+    pubnub.subscribe().channels(channels).execute()
     main()

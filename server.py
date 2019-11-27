@@ -30,12 +30,13 @@ client_channel = 'client_channel'
 meta_channel = 'meta_channel'
 request_channel = 'request_channel'
 recovery_channel = 'recovery_channel'
+server_client_channel = 'server_client_%s_channel' % sys.argv[1]
 
 messages_received = 0
 
 log_file = None
 
-print('my UUID is', pubnub.uuid)
+# print('my UUID is', pubnub.uuid)
 
 
 meta = {
@@ -46,27 +47,28 @@ meta = {
 
 # logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
-def connect_db():
+def connect_db(port_number):
     db_instance = psycopg2.connect(database='postgres', user='postgres', password='password', host='127.0.0.1',
-                                   port='5432')
-    print('opened database')
+                                   port=port_number)
+    print('started database')
     db_cursor = db_instance.cursor()
     return db_instance, db_cursor
 
 
-def setup(total_servers, server_num):
+def setup(server_num):
     global log_file
     global db_instance
     global db_cursor
     log_file = ('server%s.log' % (server_num))
     print('logfile ', log_file)
-    db_instance, db_cursor = connect_db()
+    port_number = 5431 + int(server_num)
+    db_instance, db_cursor = connect_db(port_number)
     
     # create_new_log_file()
     # create_clean_table(db_instance, db_cursor)
     
     pubnub.add_listener(MySubscribeCallback())
-    pubnub.subscribe().channels([device_channel, client_channel, request_channel, meta_channel]).execute()
+    pubnub.subscribe().channels([device_channel, client_channel, request_channel, server_client_channel]).execute()
     
 
 
@@ -82,22 +84,6 @@ def create_new_log_file():
         os.remove(log_file)
     myFile = open(log_file, 'w+')
     myFile.close()
-
-
-def get_row_from_db(date):
-    global db_instance
-    global db_cursor
-    try:
-        db_cursor.execute('SELECT input FROM numbers WHERE created_time = %s;' % (date))
-        rows = db_cursor.fetchall()
-        if rows:
-            return ' '.join(rows[0])
-         
-        return 'Date %s does not exist' % (date)
-    except:
-        logging.warning('Date %s for get request does not exist in table', date)
-        msg = 'Date %s is not valid' % (date)
-        return msg
 
 
 def my_publish_callback(envelope, status):
@@ -119,9 +105,9 @@ class MySubscribeCallback(SubscribeCallback):
             # res = json.loads(msg) 
             # print(message.user_metadata)
             process_recovered_data(message.message)
-        elif message.channel == client_channel:            
+        elif message.channel == server_client_channel:            
             msg = get_row_from_db(message.message)
-            send_message(msg, client_channel)
+            send_message(msg, server_client_channel)
         elif message.channel == recovery_channel:
 
             # print(message.message)   
@@ -165,28 +151,21 @@ def process_recovered_data(data):
         for row in data:
             date = row['date']
             value = row['input']
-            print('date %s value %s' % (date, value))
             insert_into_db(date, value)
 
 def send_message(msg, channel):
     global meta
-    print('the message sent is %s' % msg)
-    # print('meta is %s' % meta)
-    # pubnub.publish().channel(channel).meta(meta).message(msg).sync()
     pubnub.publish().channel(channel).meta(meta).message(msg).pn_async(my_publish_callback)
 
 
 def recover_at_startup():
     first_row = get_first_row_from_log()
     last_row = get_last_row_from_log()
-    print(first_row)
-    print(last_row)
     pubnub.subscribe().channels([recovery_channel]).execute()
     send_message([first_row, last_row], request_channel)
 
 
 def get_first_row_from_log():
-    print('log file is %s' % log_file)
     try:
         with open(log_file, 'r') as f:
             row = f.readline().rstrip()
@@ -205,6 +184,25 @@ def get_last_row_from_log():
         # pubnub.publish().channel(recovery_channel).meta(meta).message(str(data)).sync()
     except Exception as e:
         return None
+
+def get_row_from_db(date):
+    global db_instance
+    global db_cursor
+
+    sql = 'SELECT input FROM numbers WHERE created_time = %s;'
+    try:
+        query = db_cursor.mogrify(sql, (date,))
+        print("QUERY IS", query)
+        db_cursor.execute(query)
+        row = db_cursor.fetchone()
+        if row:
+            return ' '.join(row)
+         
+        return 'Date %s does not exist' % (date)
+    except:
+        logging.warning('Date %s for get request does not exist in table', date)
+        msg = 'Date %s is not valid' % (date)
+        return msg
 
 def get_all_rows_since_timestamp(timestamp):
     global db_instance
@@ -235,14 +233,12 @@ def main():
 
 if __name__ == "__main__": 
     global total_servers
-    total_servers = int(sys.argv[1])
-    server_num = sys.argv[2] 
+    server_num = sys.argv[1] 
     
-    setup(total_servers, server_num)
+    setup(server_num)
     # send_message('hi', meta_channel)
     recover_at_startup()
     time.sleep(3)
-    print('heeere')
     pubnub.unsubscribe().channels(recovery_channel).execute()                     
 
 
