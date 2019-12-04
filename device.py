@@ -4,7 +4,7 @@ from pubnub.pnconfiguration import PNConfiguration
 from pubnub.pubnub import PubNub
 import time
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 
 pnconfig = PNConfiguration()
@@ -25,7 +25,7 @@ meta = {
 
 def create_message(value):
 		data = []
-		date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+		date = (datetime.now() + timedelta(seconds=value)).strftime('%Y-%m-%d %H:%M:%S')
 		data.append((date, value))
 		# data['input'] = value
 		# data['datetime'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -57,12 +57,12 @@ class MySubscribeCallback(SubscribeCallback):
 def main():
 	i = 0
 
-	while True:
+	while i < 100000:
 		msg = create_message(i)
 		print(str(msg))
-		pubnub.publish().channel(device_channel).meta(meta).message((msg)).pn_async(my_publish_callback)
+		pubnub.publish().channel(device_channel).meta(meta).message(msg).sync()
 		i+=1
-		time.sleep(3)
+		# time.sleep()
 
 
 if __name__ == "__main__":    
