@@ -5,7 +5,6 @@ from pubnub.pubnub import PubNub
 import time
 import os
 import sys
-from timeit import default_timer as timer
 
 pnconfig = PNConfiguration()
 
@@ -43,11 +42,6 @@ class MySubscribeCallback(SubscribeCallback):
 
     def message(self, pubnub, message):
         # print("from server: " + message.message)
-        global stop
-        global start
-        stop = timer()
-        print('STOP', stop)
-        print('timer', stop - start)
         print(message.message)
 
 
@@ -55,7 +49,6 @@ class MySubscribeCallback(SubscribeCallback):
 ## publish a message
 def main():
     global channels
-    global start
     while True:
         msg = input("Input a message to publish: ")
         if msg == 'exit': os._exit(1)
@@ -66,8 +59,6 @@ def main():
             print('Please direct a request to one of the following channels by listing just the number associated to that channel %s' % channels)
             continue
         if channel in channels:
-            start = timer()
-            print("START", start)
             pubnub.publish().channel(channel).meta(meta).message(msg[1]).pn_async(my_publish_callback)
         else:
             print('Channel does not exist. Please try again')

@@ -57,12 +57,12 @@ class MySubscribeCallback(SubscribeCallback):
 def main():
 	i = 0
 
-	while i < 100000:
+	while True:
 		msg = create_message(i)
 		print(str(msg))
 		pubnub.publish().channel(device_channel).meta(meta).message(msg).sync()
 		i+=1
-		# time.sleep()
+		time.sleep(3)
 
 
 if __name__ == "__main__":    

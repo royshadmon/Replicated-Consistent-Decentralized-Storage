@@ -9,8 +9,6 @@ import psycopg2
 import json
 import sys
 from datetime import datetime
-from timeit import default_timer as timer
-import asyncio 
 
 
 pnconfig = PNConfiguration()
@@ -61,6 +59,7 @@ def setup(server_num):
     global log_file
     global db_instance
     global db_cursor
+    global port_number
     log_file = ('server%s.log' % (server_num))
     
     port_number = 5431 + int(server_num)
@@ -72,7 +71,6 @@ def setup(server_num):
     
     pubnub.add_listener(MySubscribeCallback())
     pubnub.subscribe().channels([device_channel, client_channel, request_channel, server_client_channel]).execute()
-    print('subscribed')
 
 
 def create_clean_table(db_instance, db_cursor):
@@ -110,16 +108,11 @@ class MySubscribeCallback(SubscribeCallback):
             msg = get_row_from_db(message.message)
             send_message(msg, server_client_channel)
         elif message.channel == recovery_channel:
-
-            # print(message.message)   
-            # print("IN HERE2", message.message)
-            global start
+            print(message.message)
             if not all(v is None for v in message.message):
                 if not message.message == 'Done':
                     process_recovered_data(message.message) 
                 else:
-                    stop = timer()
-                    print("TOTAL TIME TO RECOVER DATA", stop-start)
                     pubnub.unsubscribe().channels(recovery_channel).execute()    
                                  
                 
@@ -181,13 +174,14 @@ def send_message(msg, channel):
 
 
 def recover_at_startup():
-    global start
     first_row = get_first_row_from_log()
     last_row = get_last_row_from_log()
     pubnub.subscribe().channels([recovery_channel]).execute()
-    print("RECOVERY TIMER STARTED")
-    start = timer()
+    print("FIRST", first_row, last_row)
     send_message([first_row, last_row], request_channel)
+    # if port_number == 5432:
+    #     pubnub.unsubscribe().channels(recovery_channel).execute()                     
+
 
 
 def get_first_row_from_log():
@@ -250,20 +244,12 @@ def get_all_rows_since_timestamp(timestamp):
         logging.warning('Timestamp %s is not valid' % (timestamp))
         msg = 'Timestamp %s is not valid' % (timestamp)
         return msg
- 
-# Run server indefinitely 
-def main():
-    while True:
-        continue
 
 if __name__ == "__main__": 
     global total_servers
     server_num = sys.argv[1] 
     
     setup(server_num)
-    # send_message('hi', meta_channel)
     recover_at_startup()
-    # time.sleep(3)
-    # pubnub.unsubscribe().channels(recovery_channel).execute()                     
 
 
