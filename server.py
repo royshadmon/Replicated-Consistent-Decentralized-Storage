@@ -9,6 +9,8 @@ import psycopg2
 import json
 import sys
 from datetime import datetime
+from timeit import default_timer as timer
+import asyncio 
 
 
 pnconfig = PNConfiguration()
@@ -27,7 +29,7 @@ my_type = 'server'
 
 device_channel = 'device_channel'
 client_channel = 'client_channel'
-meta_channel = 'meta_channel'
+# meta_channel = 'meta_channel'
 request_channel = 'request_channel'
 recovery_channel = 'recovery_channel'
 server_client_channel = 'server_client_%s_channel' % sys.argv[1]
@@ -60,16 +62,17 @@ def setup(server_num):
     global db_instance
     global db_cursor
     log_file = ('server%s.log' % (server_num))
-    print('logfile ', log_file)
+    
     port_number = 5431 + int(server_num)
     db_instance, db_cursor = connect_db(port_number)
     
-    # create_new_log_file()
-    # create_clean_table(db_instance, db_cursor)
+    create_new_log_file()
+    create_clean_table(db_instance, db_cursor)
+
     
     pubnub.add_listener(MySubscribeCallback())
     pubnub.subscribe().channels([device_channel, client_channel, request_channel, server_client_channel]).execute()
-    
+    print('subscribed')
 
 
 def create_clean_table(db_instance, db_cursor):
@@ -100,34 +103,48 @@ class MySubscribeCallback(SubscribeCallback):
         pass
 
     def message(self, pubnub, message):
+        print('MESSAGE', message.channel)
         if message.channel == device_channel:
-            # msg = message.message.replace("\'", "\"")
-            # res = json.loads(msg) 
-            # print(message.user_metadata)
-            process_recovered_data(message.message)
+            process_data_from_device(message.message)
         elif message.channel == server_client_channel:            
             msg = get_row_from_db(message.message)
             send_message(msg, server_client_channel)
         elif message.channel == recovery_channel:
 
             # print(message.message)   
-            print("IN HERE2")
+            # print("IN HERE2", message.message)
+            global start
             if not all(v is None for v in message.message):
+                if not message.message == 'Done':
                     process_recovered_data(message.message) 
-                    
-            pubnub.unsubscribe().channels(recovery_channel).execute()                     
-            messages_received = 0
+                else:
+                    stop = timer()
+                    print("TOTAL TIME TO RECOVER DATA", stop-start)
+                    pubnub.unsubscribe().channels(recovery_channel).execute()    
+                                 
+                
+                
         elif message.channel == request_channel:
-            print("IN HERE")
+            
             rows = get_all_rows_since_timestamp(message.message)
-            print("ROWS ARE ", rows)
+            data = []
             if not rows is None:
-                data = []
                 for row in rows:
                     data.append((row[0].strftime("%Y-%m-%d %H:%M:%S"), row[1]))
                 tuples = [{'date':i[0], 'input': i[1]}  for i in data]
-                print('sending data ', tuples)
-                send_message(tuples, recovery_channel)
+                # send_message(tuples, recovery_channel)
+                # print('sending data ', tuples)
+                
+        
+                j = 100
+                for index in range(0, len(tuples)+j, j):
+                    print(tuples[index:index+100])
+                    send_message(tuples[index:index+100], recovery_channel)
+                    # time.sleep(.2)
+                del data
+                
+                send_message('Done', recovery_channel)
+
             else:
                 send_message(None, recovery_channel)                
 
@@ -138,20 +155,25 @@ def insert_into_db(date, value):
     global db_cursor
     sql = 'INSERT INTO numbers (created_time, input) VALUES(%s, %s) ON CONFLICT(created_time) DO NOTHING;'
     query = db_cursor.mogrify(sql, (date, value))
-    print('query is %s' % query)
     db_cursor.execute(query)
     db_instance.commit()
     with open(log_file, 'a') as f:
         f.write(date + '\n')
 
+def process_data_from_device(data):
+    insert_into_db(data[0]['date'], data[0]['input'])
+
 def process_recovered_data(data):
-    print('server 1 here ', data)
+    # print('server 1 here ', data)
     
-    if not all(v is None for v in data):
-        for row in data:
-            date = row['date']
-            value = row['input']
-            insert_into_db(date, value)
+    # if not all(v is None for v in data):
+    # print(data)
+    for row in data:
+        if row['date'] is None:
+            break
+        date = row['date']
+        value = row['input']
+        insert_into_db(date, value)
 
 def send_message(msg, channel):
     global meta
@@ -159,9 +181,12 @@ def send_message(msg, channel):
 
 
 def recover_at_startup():
+    global start
     first_row = get_first_row_from_log()
     last_row = get_last_row_from_log()
     pubnub.subscribe().channels([recovery_channel]).execute()
+    print("RECOVERY TIMER STARTED")
+    start = timer()
     send_message([first_row, last_row], request_channel)
 
 
@@ -238,7 +263,7 @@ if __name__ == "__main__":
     setup(server_num)
     # send_message('hi', meta_channel)
     recover_at_startup()
-    time.sleep(3)
-    pubnub.unsubscribe().channels(recovery_channel).execute()                     
+    # time.sleep(3)
+    # pubnub.unsubscribe().channels(recovery_channel).execute()                     
 
 
